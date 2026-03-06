@@ -1,0 +1,35 @@
+model:
+  name: "TPhaseNet"
+  in_channels: 3
+  classes: 3
+  filters_root: 8
+  depth: 8
+  kernel_size: 7
+  stride: 4
+  transformer_start_level: 4
+  n_heads: 4
+  ff_dim_factor: 4
+  dropout: 0.1
+
+data:
+  target_length: 6000
+  sampling_rate: 100.0
+  filter:
+    enabled: true
+    freq_min: 0.5
+    freq_max: 45.0
+    corners: 4
+  normalize:
+    method: "std"
+    epsilon: 1.0e-8
+
+inference:
+  device: "cuda"
+  peak_detection:
+    min_height: 0.3
+    min_distance: 100
+    min_prominence: 0.1
+  sliding_window:
+    window_size: 6000
+    step: 3000
+  output_format: "json"
