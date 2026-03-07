@@ -18,6 +18,11 @@ def compute_pick_metrics(pred_probs, true_labels, threshold=0.3,
     """
     results = {"P": _init_counts(), "S": _init_counts()}
 
+    if hasattr(pred_probs, 'numpy'):
+        pred_probs = pred_probs.detach().cpu().numpy()
+    if hasattr(true_labels, 'numpy'):
+        true_labels = true_labels.detach().cpu().numpy()
+
     batch_size = pred_probs.shape[0]
 
     for b in range(batch_size):
