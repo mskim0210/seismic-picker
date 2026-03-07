@@ -103,15 +103,21 @@ class SeisBenchPicker:
         }
 
         # SeisBench classify 사용하여 pick 추출
-        picks = self.model.classify(
+        classify_output = self.model.classify(
             st,
             P_threshold=self.p_threshold,
             S_threshold=self.s_threshold,
         )
 
+        # SeisBench >= 0.11: classify_output.picks로 접근
+        if hasattr(classify_output, 'picks'):
+            pick_list = classify_output.picks
+        else:
+            pick_list = classify_output
+
         # Pick 결과 포맷팅
         formatted_picks = []
-        for pick in picks:
+        for pick in pick_list:
             formatted_picks.append({
                 "phase": pick.phase,
                 "time": str(pick.peak_time),
