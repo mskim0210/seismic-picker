@@ -29,7 +29,7 @@ class Trainer:
         train_cfg = config.get("training", {})
 
         # DataLoader
-        from ..data.stead_dataset import worker_init_fn
+        from data.stead_dataset import worker_init_fn
         self.train_loader = DataLoader(
             train_dataset,
             batch_size=train_cfg.get("batch_size", 64),
