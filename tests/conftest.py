@@ -42,7 +42,7 @@ def model_config():
         "filters_root": 8,
         "depth": 4,
         "kernel_size": 7,
-        "stride": 4,
+        "stride": 2,
         "transformer_start_level": 2,
         "n_heads": 4,
         "ff_dim_factor": 4,

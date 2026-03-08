@@ -42,7 +42,7 @@ class STEADDataset(Dataset):
         df = self._split_data(df, split)
 
         if max_samples is not None:
-            df = df.head(max_samples)
+            df = df.sample(n=min(max_samples, len(df)), random_state=42)
 
         self.trace_names = df["trace_name"].values
         self.p_arrivals = df["p_arrival_sample"].values.astype(np.float64)
