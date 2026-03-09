@@ -57,10 +57,13 @@ class STEADDataset(Dataset):
         if "split" in df.columns:
             return df[df["split"] == split].reset_index(drop=True)
 
-        # source_id가 있으면 해시 기반 분할
+        # source_id 기반 해시, NaN인 경우 trace_name으로 fallback
         if "source_id" in df.columns:
-            hash_vals = df["source_id"].apply(
-                lambda x: hash(str(x)) % 100
+            hash_vals = df.apply(
+                lambda row: hash(str(row["source_id"])) % 100
+                if pd.notna(row["source_id"])
+                else hash(str(row["trace_name"])) % 100,
+                axis=1,
             )
         else:
             hash_vals = df["trace_name"].apply(

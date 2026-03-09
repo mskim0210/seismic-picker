@@ -32,7 +32,7 @@ def compute_pick_metrics(pred_probs, true_labels, threshold=0.3,
 
             # 예측 pick
             pred_peaks, _ = find_peaks(pred_curve, height=threshold,
-                                       distance=50)
+                                       distance=100)
 
             # 실제 pick (Gaussian 피크)
             true_peak = np.argmax(true_curve)
