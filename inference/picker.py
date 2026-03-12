@@ -4,11 +4,11 @@ import torch
 import yaml
 from pathlib import Path
 
-from ..models.tphasenet import TPhaseNet
-from ..data.mseed_loader import load_mseed, load_mseed_stream
-from ..config.defaults import get_default_config
-from .postprocessing import extract_picks, merge_sliding_window_probs
-from .output_formatter import format_picks_absolute, to_json
+from models.tphasenet import TPhaseNet
+from data.mseed_loader import load_mseed, load_mseed_stream
+from config.defaults import get_default_config
+from inference.postprocessing import extract_picks, merge_sliding_window_probs
+from inference.output_formatter import format_picks_absolute, to_json
 
 
 class SeismicPicker:
@@ -234,4 +234,65 @@ class SeismicPicker:
         return merge_sliding_window_probs(
             prob_list, self.window_size, self.step, n_samples
         )
+
+    def pick_tdms(self, tdms_path, channel_index=0):
+        """TDMS DAS 파일에서 위상 pick 추출.
+
+        Args:
+            tdms_path: TDMS 파일 경로
+            channel_index: DAS 채널 인덱스
+
+        Returns:
+            dict: picks, metadata 포함
+        """
+        from data.tdms_loader import load_tdms_channel
+
+        data_cfg = self.config.get("data", {})
+        waveform, metadata = load_tdms_channel(
+            tdms_path,
+            channel_index=channel_index,
+            target_sampling_rate=self.sampling_rate,
+            config=data_cfg,
+        )
+
+        n_samples = waveform.shape[1]
+        prob_curves = self._infer_single(waveform, self.target_length)
+        prob_curves = prob_curves[:, :n_samples]
+
+        picks = extract_picks(
+            prob_curves,
+            sampling_rate=self.sampling_rate,
+            min_height=self.peak_cfg.get("min_height", 0.3),
+            min_distance=self.peak_cfg.get("min_distance", 100),
+            min_prominence=self.peak_cfg.get("min_prominence", 0.1),
+        )
+
+        return {
+            "picks": picks,
+            **metadata,
+        }
+
+    def get_probabilities_tdms(self, tdms_path, channel_index=0):
+        """TDMS DAS 확률 곡선 반환 (시각화용).
+
+        Returns:
+            prob_curves: (3, N) numpy array [Noise, P, S]
+            waveform: (3, N) numpy array
+            metadata: dict
+        """
+        from data.tdms_loader import load_tdms_channel
+
+        data_cfg = self.config.get("data", {})
+        waveform, metadata = load_tdms_channel(
+            tdms_path,
+            channel_index=channel_index,
+            target_sampling_rate=self.sampling_rate,
+            config=data_cfg,
+        )
+
+        n_samples = waveform.shape[1]
+        prob_curves = self._infer_single(waveform, self.target_length)
+        prob_curves = prob_curves[:, :n_samples]
+
+        return prob_curves, waveform, metadata
 

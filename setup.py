@@ -19,6 +19,7 @@ setup(
     ],
     extras_require={
         "seisbench": ["seisbench>=0.4.0"],
+        "das": ["nptdms>=1.0.0"],
     },
     entry_points={
         "console_scripts": [

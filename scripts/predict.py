@@ -98,6 +98,12 @@ def parse_args():
         help="배치 크기 (기본: 1)"
     )
 
+    # DAS 옵션
+    parser.add_argument(
+        "--channel", type=int, default=0,
+        help="DAS 채널 인덱스 (TDMS 파일 전용, 기본: 0)"
+    )
+
     # 시각화
     parser.add_argument(
         "--plot", action="store_true",
@@ -159,6 +165,54 @@ def plot_results(waveform, prob_curves, picks, metadata, sampling_rate=100.0):
     plt.show()
 
 
+def plot_results_das(waveform, prob_curves, picks, metadata, sampling_rate=100.0):
+    """DAS 파형과 확률 곡선, pick 결과를 시각화."""
+    import matplotlib.pyplot as plt
+
+    n_samples = waveform.shape[1]
+    time = [i / sampling_rate for i in range(n_samples)]
+
+    fig, axes = plt.subplots(4, 1, figsize=(14, 10), sharex=True)
+
+    # DAS 단일 채널 파형
+    axes[0].plot(time, waveform[0], linewidth=0.5, alpha=0.8, color="black")
+    axes[0].set_ylabel("Amplitude")
+    ch_idx = metadata.get("channel_index", "?")
+    source = Path(metadata.get("source_file", "")).name
+    axes[0].set_title(f"DAS Ch.{ch_idx} | File: {source}")
+
+    # P파 확률
+    p_curve = prob_curves[1, :n_samples]
+    axes[1].plot(time, p_curve, color="blue", linewidth=1.0)
+    axes[1].set_ylabel("P probability")
+    axes[1].set_ylim(-0.05, 1.05)
+    axes[1].axhline(y=0.3, color="gray", linestyle="--", alpha=0.5)
+
+    # S파 확률
+    s_curve = prob_curves[2, :n_samples]
+    axes[2].plot(time, s_curve, color="red", linewidth=1.0)
+    axes[2].set_ylabel("S probability")
+    axes[2].set_ylim(-0.05, 1.05)
+    axes[2].axhline(y=0.3, color="gray", linestyle="--", alpha=0.5)
+
+    # Noise 확률
+    n_curve = prob_curves[0, :n_samples]
+    axes[3].plot(time, n_curve, color="green", linewidth=1.0)
+    axes[3].set_ylabel("Noise probability")
+    axes[3].set_ylim(-0.05, 1.05)
+    axes[3].set_xlabel("Time (s)")
+
+    # pick 마커
+    for pick in picks:
+        t = pick["sample_index"] / sampling_rate
+        color = "blue" if pick["phase"] == "P" else "red"
+        for ax in axes:
+            ax.axvline(x=t, color=color, linestyle="--", alpha=0.7, linewidth=1.0)
+
+    plt.tight_layout()
+    plt.show()
+
+
 def main():
     args = parse_args()
 
@@ -189,10 +243,37 @@ def main():
             picker.peak_cfg["min_height"] = args.threshold
 
     if args.input:
+        # TDMS vs mseed 판별
+        is_tdms = args.input.lower().endswith(".tdms")
+
+        if is_tdms and use_seisbench:
+            print("Error: TDMS 파일은 TPhaseNet 모델만 지원합니다.")
+            sys.exit(1)
+
         # 단일 파일 모드
         print(f"Processing: {args.input}")
 
-        if args.plot and not use_seisbench:
+        if is_tdms:
+            # DAS TDMS 모드
+            if args.plot:
+                prob_curves, waveform, metadata = picker.get_probabilities_tdms(
+                    args.input, channel_index=args.channel
+                )
+                from inference.postprocessing import extract_picks
+                picks = extract_picks(
+                    prob_curves,
+                    sampling_rate=picker.sampling_rate,
+                    min_height=picker.peak_cfg.get("min_height", 0.3),
+                    min_distance=picker.peak_cfg.get("min_distance", 100),
+                    min_prominence=picker.peak_cfg.get("min_prominence", 0.1),
+                )
+                plot_results_das(waveform, prob_curves, picks, metadata,
+                                 picker.sampling_rate)
+                result = {"picks": picks, **metadata}
+            else:
+                result = picker.pick_tdms(args.input, channel_index=args.channel)
+
+        elif args.plot and not use_seisbench:
             prob_curves, waveform, metadata = picker.get_probabilities(args.input)
             from inference.postprocessing import extract_picks
             from inference.output_formatter import format_picks_absolute

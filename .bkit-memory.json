@@ -1,6 +1,6 @@
 {
-  "feature": "seismic-picker",
-  "phase": "completed",
-  "matchRate": 98,
+  "feature": "das-inference",
+  "phase": "check",
+  "matchRate": 97,
   "updatedAt": "2026-03-12T00:00:00Z"
 }
