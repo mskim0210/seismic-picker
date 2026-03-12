@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..models.tphasenet import TPhaseNet
 from ..data.mseed_loader import load_mseed, load_mseed_stream
+from ..config.defaults import get_default_config
 from .postprocessing import extract_picks, merge_sliding_window_probs
 from .output_formatter import format_picks_absolute, to_json
 
@@ -28,7 +29,7 @@ class SeismicPicker:
             with open(config_path, "r") as f:
                 self.config = yaml.safe_load(f)
         else:
-            self.config = self._default_config()
+            self.config = get_default_config()
 
         # 디바이스 설정
         if device is None:
@@ -234,48 +235,3 @@ class SeismicPicker:
             prob_list, self.window_size, self.step, n_samples
         )
 
-    @staticmethod
-    def _default_config():
-        """기본 설정 반환."""
-        return {
-            "model": {
-                "name": "TPhaseNet",
-                "in_channels": 3,
-                "classes": 3,
-                "filters_root": 8,
-                "depth": 5,
-                "kernel_size": 7,
-                "stride": 2,
-                "transformer_start_level": 3,
-                "n_heads": 4,
-                "ff_dim_factor": 4,
-                "dropout": 0.1,
-            },
-            "data": {
-                "target_length": 6000,
-                "sampling_rate": 100.0,
-                "filter": {
-                    "enabled": True,
-                    "freq_min": 0.5,
-                    "freq_max": 45.0,
-                    "corners": 4,
-                },
-                "normalize": {
-                    "method": "std",
-                    "epsilon": 1e-8,
-                },
-            },
-            "inference": {
-                "device": "cuda",
-                "peak_detection": {
-                    "min_height": 0.3,
-                    "min_distance": 100,
-                    "min_prominence": 0.1,
-                },
-                "sliding_window": {
-                    "window_size": 6000,
-                    "step": 3000,
-                },
-                "output_format": "json",
-            },
-        }

@@ -44,6 +44,7 @@ if project_root not in sys.path:
 from models.tphasenet import TPhaseNet
 from data.stead_dataset import STEADDataset
 from training.metrics import compute_pick_metrics
+from config.defaults import get_default_config
 
 
 def parse_args():
@@ -96,7 +97,7 @@ def load_model(model_path, config, device):
     if config is None and "config" in checkpoint:
         config = checkpoint["config"]
     if config is None:
-        config = _default_config()
+        config = get_default_config()
 
     model = TPhaseNet.from_config(config)
 
@@ -319,29 +320,6 @@ def main():
             with open(path, "w") as f:
                 json.dump(metrics, f, indent=2)
             print(f"\nResults saved to: {path}")
-
-
-def _default_config():
-    return {
-        "model": {
-            "name": "TPhaseNet",
-            "in_channels": 3,
-            "classes": 3,
-            "filters_root": 8,
-            "depth": 5,
-            "kernel_size": 7,
-            "stride": 2,
-            "transformer_start_level": 3,
-            "n_heads": 4,
-            "ff_dim_factor": 4,
-            "dropout": 0.1,
-        },
-        "data": {
-            "target_length": 6000,
-            "sampling_rate": 100.0,
-            "label_sigma": 20,
-        },
-    }
 
 
 if __name__ == "__main__":

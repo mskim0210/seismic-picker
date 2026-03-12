@@ -31,12 +31,9 @@ class Encoder(nn.Module):
 
         # 다운샘플링 블록 (levels 0 ~ depth-2)
         self.down_blocks = nn.ModuleList()
-        self.transformer_blocks = nn.ModuleList()
+        self.transformer_blocks = nn.ModuleDict()
 
         for level in range(depth - 1):
-            ch_in = filters_root * (2 ** level) if level > 0 else filters_root
-            ch_out = filters_root * (2 ** level) if level == 0 else filters_root * (2 ** level)
-
             # 채널 수 계산: level 0은 root, level i는 root * 2^i
             if level == 0:
                 ch_in = filters_root
@@ -52,11 +49,9 @@ class Encoder(nn.Module):
             # Transformer 블록 (해당 레벨에만)
             if level >= transformer_start_level:
                 heads = n_heads if level < depth - 2 else n_heads * 2
-                self.transformer_blocks.append(
-                    TransformerBlock(ch_out, heads, ff_dim_factor, dropout)
+                self.transformer_blocks[str(level)] = TransformerBlock(
+                    ch_out, heads, ff_dim_factor, dropout
                 )
-            else:
-                self.transformer_blocks.append(None)
 
         # Bottleneck (마지막 레벨): conv + transformer, 다운샘플링 없음
         bottleneck_in = filters_root * (2 ** (depth - 2))
@@ -86,8 +81,9 @@ class Encoder(nn.Module):
             skip, x = self.down_blocks[level](x)
 
             # Transformer 블록 적용 (skip connection 이후 다운샘플링 전 특징에 적용)
-            if self.transformer_blocks[level] is not None:
-                skip = self.transformer_blocks[level](skip)
+            level_key = str(level)
+            if level_key in self.transformer_blocks:
+                skip = self.transformer_blocks[level_key](skip)
 
             skips.append(skip)
 

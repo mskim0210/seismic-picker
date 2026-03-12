@@ -19,18 +19,15 @@ def _get_component_index(channel_code):
     return CHANNEL_MAP.get(last_char, -1)
 
 
-def load_mseed(file_path, target_sampling_rate=100.0, target_length=6000,
-               config=None):
-    """mseed 파일을 로드하여 전처리된 3성분 파형 반환.
+def _load_and_align(file_path, target_sampling_rate=100.0):
+    """mseed 파일에서 3성분 파형을 로드하고 정렬.
 
     Args:
         file_path: mseed 파일 경로
         target_sampling_rate: 목표 샘플링 레이트 (Hz)
-        target_length: 목표 샘플 수 (6000 = 60초 × 100Hz)
-        config: data 설정 dict
 
     Returns:
-        waveform: (3, target_length) numpy array (float32)
+        aligned: (3, N) numpy array (float64)
         metadata: dict (start_time, station, network, channels)
     """
     st = obspy_read(str(file_path))
@@ -61,16 +58,14 @@ def load_mseed(file_path, target_sampling_rate=100.0, target_length=6000,
         "original_sampling_rate": ref_trace.stats.sampling_rate,
     }
 
-    # 각 성분 전처리
+    # 각 성분 전처리 (리샘플링 + 누락 채널 0 채움)
     data_arrays = []
     for i, tr in enumerate(components):
         if tr is None:
-            # 누락된 성분은 0으로 채움
-            n_samples = int(target_length * (ref_trace.stats.sampling_rate
-                                             / target_sampling_rate))
+            n_samples = int(ref_trace.stats.npts * (target_sampling_rate
+                                                     / ref_trace.stats.sampling_rate))
             data_arrays.append(np.zeros(n_samples, dtype=np.float64))
         else:
-            # 리샘플링
             if abs(tr.stats.sampling_rate - target_sampling_rate) > 0.01:
                 tr.resample(target_sampling_rate)
             data_arrays.append(tr.data.astype(np.float64))
@@ -80,6 +75,25 @@ def load_mseed(file_path, target_sampling_rate=100.0, target_length=6000,
     aligned = np.zeros((3, max_len), dtype=np.float64)
     for i, d in enumerate(data_arrays):
         aligned[i, :len(d)] = d
+
+    return aligned, metadata
+
+
+def load_mseed(file_path, target_sampling_rate=100.0, target_length=6000,
+               config=None):
+    """mseed 파일을 로드하여 전처리된 3성분 파형 반환.
+
+    Args:
+        file_path: mseed 파일 경로
+        target_sampling_rate: 목표 샘플링 레이트 (Hz)
+        target_length: 목표 샘플 수 (6000 = 60초 × 100Hz)
+        config: data 설정 dict
+
+    Returns:
+        waveform: (3, target_length) numpy array (float32)
+        metadata: dict (start_time, station, network, channels)
+    """
+    aligned, metadata = _load_and_align(file_path, target_sampling_rate)
 
     # 전처리 (demean, detrend, bandpass, normalize)
     aligned = preprocess(aligned, target_sampling_rate, config)
@@ -112,47 +126,9 @@ def load_mseed_stream(file_path, target_sampling_rate=100.0, config=None):
         waveform: (3, N) numpy array (float32)
         metadata: dict
     """
-    st = obspy_read(str(file_path))
+    aligned, metadata = _load_and_align(file_path, target_sampling_rate)
 
-    components = [None, None, None]
-    channels_found = []
-
-    for tr in st:
-        idx = _get_component_index(tr.stats.channel)
-        if idx >= 0:
-            components[idx] = tr
-            channels_found.append(tr.stats.channel)
-
-    missing = [i for i, c in enumerate(components) if c is None]
-    if len(missing) == 3:
-        raise ValueError(f"mseed 파일에서 유효한 3성분을 찾을 수 없습니다: {file_path}")
-
-    ref_trace = next(c for c in components if c is not None)
-    metadata = {
-        "start_time": str(ref_trace.stats.starttime),
-        "station": ref_trace.stats.station,
-        "network": ref_trace.stats.network,
-        "location": ref_trace.stats.location,
-        "channels": channels_found,
-        "original_sampling_rate": ref_trace.stats.sampling_rate,
-    }
-
-    data_arrays = []
-    for i, tr in enumerate(components):
-        if tr is None:
-            n_samples = int(ref_trace.stats.npts * (target_sampling_rate
-                                                     / ref_trace.stats.sampling_rate))
-            data_arrays.append(np.zeros(n_samples, dtype=np.float64))
-        else:
-            if abs(tr.stats.sampling_rate - target_sampling_rate) > 0.01:
-                tr.resample(target_sampling_rate)
-            data_arrays.append(tr.data.astype(np.float64))
-
-    max_len = max(len(d) for d in data_arrays)
-    aligned = np.zeros((3, max_len), dtype=np.float64)
-    for i, d in enumerate(data_arrays):
-        aligned[i, :len(d)] = d
-
+    # 전처리 (demean, detrend, bandpass, normalize)
     aligned = preprocess(aligned, target_sampling_rate, config)
 
     return aligned, metadata

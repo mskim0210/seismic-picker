@@ -33,7 +33,6 @@ def extract_picks(prob_curves, sampling_rate=100.0, min_height=0.3,
             height=min_height,
             distance=min_distance,
             prominence=min_prominence,
-            width=True,
         )
 
         for i, peak_idx in enumerate(peaks):

@@ -45,6 +45,7 @@ if project_root not in sys.path:
 from models.tphasenet import TPhaseNet
 from data.stead_dataset import STEADDataset
 from training.metrics import compute_pick_metrics
+from config.defaults import get_default_config
 
 
 def parse_args():
@@ -92,7 +93,7 @@ def benchmark_tphasenet(model_path, dataloader, device, threshold, tolerance_sec
                         sampling_rate, speed_only=False):
     """TPhaseNet 모델 벤치마크."""
     checkpoint = torch.load(model_path, map_location=device, weights_only=False)
-    config = checkpoint.get("config", _default_config())
+    config = checkpoint.get("config", get_default_config())
 
     model = TPhaseNet.from_config(config)
     if "model_state_dict" in checkpoint:
@@ -201,11 +202,7 @@ def benchmark_seisbench(model_name, pretrained, dataloader, device_str,
             total_samples += waveforms.shape[0]
 
             if not speed_only:
-                # SeisBench 출력 형식을 (B, 3, T)로 맞춤
-                if predictions.dim() == 3 and predictions.shape[1] == 3:
-                    all_preds.append(predictions.cpu())
-                else:
-                    all_preds.append(predictions.cpu())
+                all_preds.append(predictions.cpu())
                 all_labels.append(labels)
 
     result = {
@@ -348,29 +345,6 @@ def main():
             print(f"\nResults saved to: {path}")
     else:
         print("No models to benchmark. Use --model or remove --no-seisbench.")
-
-
-def _default_config():
-    return {
-        "model": {
-            "name": "TPhaseNet",
-            "in_channels": 3,
-            "classes": 3,
-            "filters_root": 8,
-            "depth": 5,
-            "kernel_size": 7,
-            "stride": 2,
-            "transformer_start_level": 3,
-            "n_heads": 4,
-            "ff_dim_factor": 4,
-            "dropout": 0.1,
-        },
-        "data": {
-            "target_length": 6000,
-            "sampling_rate": 100.0,
-            "label_sigma": 20,
-        },
-    }
 
 
 if __name__ == "__main__":

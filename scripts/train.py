@@ -31,6 +31,7 @@ from models.tphasenet import TPhaseNet
 from data.stead_dataset import STEADDataset
 from data.augmentation import get_default_augmentation
 from training.trainer import Trainer
+from config.defaults import get_default_config
 
 
 def parse_args():
@@ -82,7 +83,7 @@ def main():
         with open(args.config, "r") as f:
             config = yaml.safe_load(f)
     else:
-        config = _default_config()
+        config = get_default_config()
 
     # CLI 인수로 config 오버라이드
     train_cfg = config.setdefault("training", {})
@@ -155,52 +156,6 @@ def main():
         trainer.best_val_loss = checkpoint.get("best_val_loss", float("inf"))
 
     trainer.train()
-
-
-def _default_config():
-    return {
-        "model": {
-            "name": "TPhaseNet",
-            "in_channels": 3,
-            "classes": 3,
-            "filters_root": 8,
-            "depth": 5,
-            "kernel_size": 7,
-            "stride": 2,
-            "transformer_start_level": 3,
-            "n_heads": 4,
-            "ff_dim_factor": 4,
-            "dropout": 0.1,
-        },
-        "data": {
-            "target_length": 6000,
-            "sampling_rate": 100.0,
-            "label_sigma": 20,
-        },
-        "training": {
-            "batch_size": 64,
-            "num_workers": 4,
-            "max_epochs": 100,
-            "loss": "weighted_ce",
-            "class_weights": [1.0, 30.0, 30.0],
-            "optimizer": {
-                "type": "adam",
-                "lr": 1e-3,
-                "weight_decay": 1e-5,
-                "betas": [0.9, 0.999],
-            },
-            "scheduler": {
-                "type": "reduce_on_plateau",
-                "factor": 0.5,
-                "patience": 5,
-                "min_lr": 1e-6,
-            },
-            "gradient_clip": 1.0,
-            "early_stopping": {"patience": 15},
-            "mixed_precision": True,
-            "checkpoint_dir": "./checkpoints",
-        },
-    }
 
 
 if __name__ == "__main__":

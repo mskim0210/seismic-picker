@@ -5,11 +5,15 @@ STEAD: 1,265,657개 3성분 지진파형, 60초, 100Hz, HDF5+CSV 형식.
 다운로드: https://github.com/smousavi05/STEAD
 """
 
+import hashlib
+import logging
 import numpy as np
 import pandas as pd
 import h5py
 import torch
 from torch.utils.data import Dataset
+
+logger = logging.getLogger(__name__)
 
 from .label_utils import generate_labels
 
@@ -58,17 +62,19 @@ class STEADDataset(Dataset):
             return df[df["split"] == split].reset_index(drop=True)
 
         # source_id 기반 해시, NaN인 경우 trace_name으로 fallback
+        # hashlib.md5 사용으로 PYTHONHASHSEED에 무관하게 재현 가능
+        def _deterministic_hash(value):
+            return int(hashlib.md5(str(value).encode()).hexdigest(), 16) % 100
+
         if "source_id" in df.columns:
             hash_vals = df.apply(
-                lambda row: hash(str(row["source_id"])) % 100
+                lambda row: _deterministic_hash(row["source_id"])
                 if pd.notna(row["source_id"])
-                else hash(str(row["trace_name"])) % 100,
+                else _deterministic_hash(row["trace_name"]),
                 axis=1,
             )
         else:
-            hash_vals = df["trace_name"].apply(
-                lambda x: hash(str(x)) % 100
-            )
+            hash_vals = df["trace_name"].apply(_deterministic_hash)
 
         if split == "train":
             mask = hash_vals < 80
@@ -101,7 +107,7 @@ class STEADDataset(Dataset):
         except KeyError:
             # earthquake/noise 그룹에서 시도
             for group in ["earthquake/local", "non_earthquake/noise"]:
-                key = f"data/{trace_name}"
+                key = f"{group}/{trace_name}"
                 if key in self._hdf5_file:
                     waveform = np.array(
                         self._hdf5_file[key], dtype=np.float32
@@ -109,6 +115,7 @@ class STEADDataset(Dataset):
                     break
             else:
                 # 빈 파형 반환
+                logger.warning(f"Trace not found in HDF5: {trace_name}")
                 waveform = np.zeros((self.target_length, 3), dtype=np.float32)
 
         # (N, 3) -> (3, N), 채널 순서: E,N,Z -> Z,N,E (인덱스 2,1,0)

@@ -36,7 +36,7 @@ def compute_pick_metrics(pred_probs, true_labels, threshold=0.3,
 
             # 실제 pick (Gaussian 피크)
             true_peak = np.argmax(true_curve)
-            has_true = true_curve[true_peak] > 0.5 if true_peak > 0 else False
+            has_true = true_curve[true_peak] > 0.5
 
             if len(pred_peaks) > 0 and has_true:
                 # 가장 가까운 예측 pick과 비교
