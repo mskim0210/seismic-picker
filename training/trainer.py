@@ -230,8 +230,8 @@ class Trainer:
             total_loss += loss.item()
             n_batches += 1
 
-            # 메트릭 계산을 위해 수집 (첫 10배치만)
-            if n_batches <= 10:
+            # 메트릭 계산을 위해 수집 (균등 샘플링, ~640개)
+            if len(all_preds) < 10 and n_batches % max(1, len(self.val_loader) // 10) == 0:
                 all_preds.append(predictions.cpu().numpy())
                 all_labels.append(labels.cpu().numpy())
 
