@@ -4,9 +4,22 @@
 
 TPhaseNet은 PhaseNet(U-Net)에 Transformer 블록을 결합한 딥러닝 모델로, 3성분 지진파형에서 P파와 S파 도착 시각을 자동으로 검출합니다.
 
+## 성능
+
+STEAD 테스트셋 (127,652 traces) 기준, threshold=0.8:
+
+| Phase | Precision | Recall | F1 | Residual (sec) |
+|-------|-----------|--------|------|----------------|
+| P-wave | 0.9708 | 0.9951 | **0.9828** | -0.007 ± 0.039 |
+| S-wave | 0.9569 | 0.9738 | **0.9653** | +0.004 ± 0.111 |
+
+- 모델 파라미터: **517,691** (0.5M)
+- 학습: STEAD 전체 (1,011,324 train / 126,681 val), 48 epochs
+- GPU: NVIDIA RTX 5090
+
 ## 주요 특징
 
-- **TPhaseNet 아키텍처**: U-Net + Transformer (약 34M 파라미터)
+- **TPhaseNet 아키텍처**: U-Net + Transformer (약 517K 파라미터)
 - **입출력**: `(B, 3, 6000)` → `(B, 3, 6000)` [Noise, P파, S파] 확률 (softmax)
 - **SeisBench 연동**: PhaseNet/EQTransformer 사전학습 가중치로 즉시 추론 가능
 - **STEAD 학습**: 127만 지진파형 데이터셋으로 자체 모델 학습 지원
@@ -19,12 +32,12 @@ TPhaseNet은 PhaseNet(U-Net)에 Transformer 블록을 결합한 딥러닝 모델
 seismic-picker/
 ├── models/                  # 딥러닝 모델
 │   ├── tphasenet.py         # Encoder+Decoder 조립, from_config() 지원
-│   ├── encoder.py           # 7-level 인코더 (Level 4-7에 Transformer)
-│   ├── decoder.py           # 7-level 디코더 + skip connection + softmax 출력
+│   ├── encoder.py           # 4-level 인코더 (Level 3-4에 Transformer)
+│   ├── decoder.py           # 4-level 디코더 + skip connection + softmax 출력
 │   ├── conv_blocks.py       # DownBlock/UpBlock (Conv1d+BN+ReLU)
 │   └── transformer_block.py # Sinusoidal PE + Transformer Encoder Layer
 ├── data/                    # 데이터 로딩 및 전처리
-│   ├── stead_dataset.py     # STEAD HDF5 PyTorch Dataset (source_id 기반 split)
+│   ├── stead_dataset.py     # STEAD HDF5 PyTorch Dataset (md5 해시 기반 split)
 │   ├── preprocessing.py     # demean, detrend, bandpass(0.5-45Hz), normalize
 │   ├── augmentation.py      # 노이즈, 스케일링, 시간이동, 채널드롭, 극성반전
 │   ├── mseed_loader.py      # ObsPy로 mseed 읽기, 3성분 정렬, 전처리
@@ -41,9 +54,13 @@ seismic-picker/
 ├── scripts/                 # CLI 스크립트
 │   ├── predict.py           # 추론 CLI (단일파일/디렉토리, 시각화 옵션)
 │   ├── train.py             # 학습 CLI (resume, max-samples 지원)
+│   ├── evaluate.py          # 모델 평가 (threshold sweep, residual 분석)
+│   ├── benchmark.py         # 모델 간 벤치마크 비교 (TPhaseNet vs SeisBench)
 │   └── download_stead.py    # STEAD 다운로드 안내/SeisBench 연동
 ├── config/
-│   └── default.yaml         # 기본 설정 (모델, 데이터, 추론)
+│   ├── default.yaml         # 기본 설정 (모델, 데이터, 추론)
+│   └── defaults.py          # 기본 설정값 단일 소스 (모든 스크립트에서 참조)
+├── tests/                   # 단위 테스트 (82개)
 ├── requirements.txt
 └── setup.py
 ```
@@ -53,7 +70,7 @@ seismic-picker/
 ### 요구사항
 
 - Python >= 3.9
-- NVIDIA GPU (16-24GB VRAM 권장, CPU도 가능)
+- NVIDIA GPU (8GB+ VRAM 권장, CPU도 가능)
 
 ### 설치 방법
 
@@ -110,6 +127,29 @@ python -m scripts.predict --input-dir ./data/ --model checkpoint.pt --output-dir
 python -m scripts.predict --input station.mseed --model checkpoint.pt --plot
 ```
 
+### 평가
+
+```bash
+# 기본 평가
+python -m scripts.evaluate \
+    --model checkpoints/best_model.pt \
+    --csv /path/to/merged.csv \
+    --hdf5 /path/to/merged.hdf5
+
+# threshold 범위 분석
+python -m scripts.evaluate \
+    --model checkpoints/best_model.pt \
+    --csv /path/to/merged.csv \
+    --hdf5 /path/to/merged.hdf5 \
+    --sweep-thresholds
+
+# 모델 간 벤치마크 비교
+python -m scripts.benchmark \
+    --model checkpoints/best_model.pt \
+    --csv /path/to/merged.csv \
+    --hdf5 /path/to/merged.hdf5
+```
+
 ## 설정
 
 `config/default.yaml`에서 모델, 데이터 전처리, 추론 파라미터를 설정할 수 있습니다.
@@ -117,10 +157,10 @@ python -m scripts.predict --input station.mseed --model checkpoint.pt --plot
 ```yaml
 model:
   filters_root: 8       # 기본 채널 수
-  depth: 8              # U-Net 깊이 (8 레벨)
+  depth: 5              # U-Net 깊이 (5 레벨)
   kernel_size: 7        # 컨볼루션 커널 크기
-  stride: 4             # 다운샘플링 스트라이드
-  transformer_start_level: 4  # Transformer 적용 시작 레벨
+  stride: 2             # 다운샘플링 스트라이드
+  transformer_start_level: 3  # Transformer 적용 시작 레벨
   n_heads: 4            # 어텐션 헤드 수
   dropout: 0.1
 
