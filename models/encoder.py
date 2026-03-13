@@ -16,17 +16,20 @@ class Encoder(nn.Module):
 
     def __init__(self, in_channels=3, filters_root=8, depth=8,
                  kernel_size=7, stride=4, transformer_start_level=4,
-                 n_heads=4, ff_dim_factor=4, dropout=0.1):
+                 n_heads=4, ff_dim_factor=4, dropout=0.1,
+                 activation="silu"):
         super().__init__()
         self.depth = depth
         self.transformer_start_level = transformer_start_level
+
+        from .conv_blocks import _get_activation
 
         # 입력 컨볼루션: in_channels -> filters_root
         self.input_conv = nn.Sequential(
             nn.Conv1d(in_channels, filters_root, kernel_size,
                       padding=kernel_size // 2),
             nn.BatchNorm1d(filters_root),
-            nn.ReLU(inplace=True),
+            _get_activation(activation),
         )
 
         # 다운샘플링 블록 (levels 0 ~ depth-2)
@@ -43,7 +46,8 @@ class Encoder(nn.Module):
                 ch_out = filters_root * (2 ** level)
 
             self.down_blocks.append(
-                DownBlock(ch_in, ch_out, kernel_size, stride)
+                DownBlock(ch_in, ch_out, kernel_size, stride,
+                          activation=activation)
             )
 
             # Transformer 블록 (해당 레벨에만)
@@ -60,7 +64,7 @@ class Encoder(nn.Module):
             nn.Conv1d(bottleneck_in, bottleneck_out, kernel_size,
                       padding=kernel_size // 2),
             nn.BatchNorm1d(bottleneck_out),
-            nn.ReLU(inplace=True),
+            _get_activation(activation),
         )
         self.bottleneck_transformer = TransformerBlock(
             bottleneck_out, n_heads * 2, ff_dim_factor, dropout

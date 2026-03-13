@@ -2,14 +2,23 @@ import torch
 import torch.nn as nn
 
 
-class DownBlock(nn.Module):
-    """인코더 다운샘플링 블록.
+def _get_activation(activation="silu"):
+    """activation 문자열로 nn.Module 반환."""
+    if activation == "silu":
+        return nn.SiLU(inplace=True)
+    return nn.ReLU(inplace=True)
 
-    Conv1d(same) -> BN -> ReLU -> Conv1d(stride) -> BN -> ReLU
+
+class DownBlock(nn.Module):
+    """인코더 다운샘플링 블록 (ResNet).
+
+    Conv1d(same) -> BN -> Act -> Conv1d(stride) -> BN + residual -> Act
+    Projection shortcut: 1x1 Conv(stride) -> BN
     skip connection은 다운샘플링 전 출력을 반환.
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size=7, stride=4):
+    def __init__(self, in_channels, out_channels, kernel_size=7, stride=4,
+                 activation="silu"):
         super().__init__()
         padding = kernel_size // 2
 
@@ -21,7 +30,13 @@ class DownBlock(nn.Module):
                                stride=stride, padding=padding)
         self.bn2 = nn.BatchNorm1d(out_channels)
 
-        self.relu = nn.ReLU(inplace=True)
+        self.act = _get_activation(activation)
+
+        # Projection shortcut: in_channels → out_channels, T → T//stride
+        self.shortcut = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=stride),
+            nn.BatchNorm1d(out_channels),
+        )
 
     def forward(self, x):
         """
@@ -29,21 +44,27 @@ class DownBlock(nn.Module):
             x: (B, C_in, T)
         Returns:
             skip: (B, C_out, T) - 다운샘플링 전 특징 (skip connection용)
-            out:  (B, C_out, T//stride) - 다운샘플링된 특징
+            out:  (B, C_out, T//stride) - residual 적용된 다운샘플링 결과
         """
-        x = self.relu(self.bn1(self.conv1(x)))
+        identity = x
+
+        x = self.act(self.bn1(self.conv1(x)))
         skip = x
-        out = self.relu(self.bn2(self.conv2(x)))
+        out = self.bn2(self.conv2(x))
+
+        out = self.act(out + self.shortcut(identity))
         return skip, out
 
 
 class UpBlock(nn.Module):
-    """디코더 업샘플링 블록.
+    """디코더 업샘플링 블록 (ResNet).
 
-    ConvTranspose1d(stride) -> BN -> ReLU -> concat(skip) -> Conv1d -> BN -> ReLU
+    ConvTranspose1d(stride) -> BN -> Act -> concat(skip) -> Conv1d -> BN + residual -> Act
+    Projection shortcut: 1x1 Conv -> BN (concat 채널 → out_channels)
     """
 
-    def __init__(self, in_channels, out_channels, kernel_size=7, stride=4):
+    def __init__(self, in_channels, out_channels, kernel_size=7, stride=4,
+                 activation="silu"):
         super().__init__()
         padding = kernel_size // 2
 
@@ -59,7 +80,13 @@ class UpBlock(nn.Module):
                               padding=padding)
         self.bn2 = nn.BatchNorm1d(out_channels)
 
-        self.relu = nn.ReLU(inplace=True)
+        self.act = _get_activation(activation)
+
+        # Projection shortcut: concat 채널(out*2) → out_channels
+        self.shortcut = nn.Sequential(
+            nn.Conv1d(out_channels * 2, out_channels, kernel_size=1),
+            nn.BatchNorm1d(out_channels),
+        )
 
     def forward(self, x, skip):
         """
@@ -69,7 +96,7 @@ class UpBlock(nn.Module):
         Returns:
             out:  (B, C_out, T_large)
         """
-        x = self.relu(self.bn1(self.upconv(x)))
+        x = self.act(self.bn1(self.upconv(x)))
 
         # 업샘플링 결과와 skip 길이가 다를 수 있으므로 맞춤
         diff = skip.size(2) - x.size(2)
@@ -78,6 +105,8 @@ class UpBlock(nn.Module):
         elif diff < 0:
             x = x[:, :, :skip.size(2)]
 
-        x = torch.cat([x, skip], dim=1)
-        out = self.relu(self.bn2(self.conv(x)))
+        concat = torch.cat([x, skip], dim=1)
+        out = self.bn2(self.conv(concat))
+
+        out = self.act(out + self.shortcut(concat))
         return out

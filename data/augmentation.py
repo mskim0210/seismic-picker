@@ -132,6 +132,45 @@ class RandomPolarityFlip:
         return waveform, labels
 
 
+class RandomGapInsertion:
+    """랜덤 데이터 결측 구간 삽입.
+
+    실제 계측기 데이터에서 발생하는 데이터 드롭아웃/결측을 시뮬레이션.
+    NORSAR TPhasenet 논문의 gap insertion augmentation 참고.
+
+    Args:
+        gap_length_range: (min, max) 갭 길이 (samples)
+        max_gaps: 한 trace 내 최대 갭 수
+        probability: 적용 확률
+    """
+
+    def __init__(self, gap_length_range=(50, 500), max_gaps=3, probability=0.2):
+        self.gap_length_range = gap_length_range
+        self.max_gaps = max_gaps
+        self.probability = probability
+
+    def __call__(self, waveform, labels):
+        if np.random.random() > self.probability:
+            return waveform, labels
+
+        n_samples = waveform.shape[-1]
+        n_gaps = np.random.randint(1, self.max_gaps + 1)
+
+        for _ in range(n_gaps):
+            gap_len = np.random.randint(*self.gap_length_range)
+            max_start = n_samples - gap_len
+            if max_start <= 0:
+                continue
+            start = np.random.randint(0, max_start)
+            end = start + gap_len
+
+            waveform[:, start:end] = 0.0
+            labels[:, start:end] = 0.0
+            labels[0, start:end] = 1.0  # Noise
+
+        return waveform, labels
+
+
 def get_default_augmentation():
     """기본 데이터 증강 파이프라인 반환."""
     return Compose([
@@ -140,4 +179,5 @@ def get_default_augmentation():
         RandomTimeShift(max_shift=200, probability=0.3),
         RandomChannelDrop(probability=0.1),
         RandomPolarityFlip(probability=0.5),
+        RandomGapInsertion(gap_length_range=(50, 500), max_gaps=3, probability=0.2),
     ])

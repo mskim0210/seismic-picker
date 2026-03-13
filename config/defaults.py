@@ -20,6 +20,9 @@ def get_default_config():
             "n_heads": 4,
             "ff_dim_factor": 4,
             "dropout": 0.1,
+            "activation": "silu",
+            "skip_attention": True,
+            "lstm_hidden": 64,
         },
         "data": {
             "target_length": 6000,

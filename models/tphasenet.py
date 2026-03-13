@@ -17,7 +17,8 @@ class TPhaseNet(nn.Module):
 
     def __init__(self, in_channels=3, classes=3, filters_root=8, depth=8,
                  kernel_size=7, stride=4, transformer_start_level=4,
-                 n_heads=4, ff_dim_factor=4, dropout=0.1):
+                 n_heads=4, ff_dim_factor=4, dropout=0.1,
+                 activation="silu", skip_attention=True, lstm_hidden=64):
         super().__init__()
         self.encoder = Encoder(
             in_channels=in_channels,
@@ -29,6 +30,7 @@ class TPhaseNet(nn.Module):
             n_heads=n_heads,
             ff_dim_factor=ff_dim_factor,
             dropout=dropout,
+            activation=activation,
         )
         self.decoder = Decoder(
             classes=classes,
@@ -36,6 +38,11 @@ class TPhaseNet(nn.Module):
             depth=depth,
             kernel_size=kernel_size,
             stride=stride,
+            activation=activation,
+            skip_attention=skip_attention,
+            lstm_hidden=lstm_hidden,
+            n_heads=n_heads,
+            dropout=dropout,
         )
 
     def forward(self, x):
@@ -64,6 +71,9 @@ class TPhaseNet(nn.Module):
             n_heads=model_cfg.get("n_heads", 4),
             ff_dim_factor=model_cfg.get("ff_dim_factor", 4),
             dropout=model_cfg.get("dropout", 0.1),
+            activation=model_cfg.get("activation", "silu"),
+            skip_attention=model_cfg.get("skip_attention", True),
+            lstm_hidden=model_cfg.get("lstm_hidden", 64),
         )
 
     def count_parameters(self):
